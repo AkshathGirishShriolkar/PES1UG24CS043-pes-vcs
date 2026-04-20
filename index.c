@@ -221,16 +221,48 @@ int index_save(const Index *index) {
         char hash_hex[HASH_HEX_SIZE + 1];
         hash_to_hex(&sorted[i].hash, hash_hex);
 
-        fprintf(fp, "%o %s %llu %u %s\n",
-                sorted[i].mode,
-                hash_hex,
-                (unsigned long long)sorted[i].mtime_sec,
-                sorted[i].size,
-                sorted[i].path);
+        if (fprintf(fp, "%o %s %llu %u %s\n",
+                    sorted[i].mode,
+                    hash_hex,
+                    (unsigned long long)sorted[i].mtime_sec,
+                    sorted[i].size,
+                    sorted[i].path) < 0) {
+            fclose(fp);
+            unlink(temp_path);
+            return -1;
+        }
     }
 
-    fclose(fp);
-    return -1;
+    if (fflush(fp) != 0) {
+        fclose(fp);
+        unlink(temp_path);
+        return -1;
+    }
+
+    int fd = fileno(fp);
+    if (fd < 0) {
+        fclose(fp);
+        unlink(temp_path);
+        return -1;
+    }
+
+    if (fsync(fd) != 0) {
+        fclose(fp);
+        unlink(temp_path);
+        return -1;
+    }
+
+    if (fclose(fp) != 0) {
+        unlink(temp_path);
+        return -1;
+    }
+
+    if (rename(temp_path, INDEX_FILE) != 0) {
+        unlink(temp_path);
+        return -1;
+    }
+
+    return 0;
 }
 
 // Stage a file for the next commit.
