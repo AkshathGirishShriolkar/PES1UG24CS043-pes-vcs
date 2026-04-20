@@ -277,6 +277,17 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
         return -1;
     }
 
+    void *out = malloc(declared_len == 0 ? 1 : declared_len);
+    if (!out) {
+        free(buffer);
+        return -1;
+    }
+
+    memcpy(out, buffer + header_len + 1, declared_len);
+
+    *data_out = out;
+    *len_out = declared_len;
+
     free(buffer);
-    return -1;
+    return 0;
 }
