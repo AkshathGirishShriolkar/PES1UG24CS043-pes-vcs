@@ -131,10 +131,13 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 //
 // Returns 0 on success, -1 on error.
 int tree_from_index(ObjectID *id_out) {
-    Index index;
-    if (index_load(&index) != 0) {
-        return -1;
-    }
+    int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out);
+
+    typedef struct {
+        uint32_t mode;
+        ObjectID hash;
+        char path[512];
+    } SimpleIndexEntry;
 
     typedef struct {
         char path[512];
@@ -143,6 +146,41 @@ int tree_from_index(ObjectID *id_out) {
         int depth;
         Tree tree;
     } DirNode;
+
+    SimpleIndexEntry index_entries[MAX_TREE_ENTRIES];
+    int index_count = 0;
+
+    FILE *fp = fopen(INDEX_FILE, "r");
+    if (fp) {
+        while (index_count < MAX_TREE_ENTRIES) {
+            unsigned int mode;
+            char hash_hex[HASH_HEX_SIZE + 1];
+            unsigned long long mtime_ignored;
+            unsigned int size_ignored;
+            char path[512];
+
+            int rc = fscanf(fp, "%o %64s %llu %u %511s",
+                            &mode, hash_hex, &mtime_ignored, &size_ignored, path);
+            if (rc == EOF) {
+                break;
+            }
+            if (rc != 5) {
+                fclose(fp);
+                return -1;
+            }
+
+            index_entries[index_count].mode = mode;
+            if (hex_to_hash(hash_hex, &index_entries[index_count].hash) != 0) {
+                fclose(fp);
+                return -1;
+            }
+            snprintf(index_entries[index_count].path,
+                     sizeof(index_entries[index_count].path),
+                     "%s", path);
+            index_count++;
+        }
+        fclose(fp);
+    }
 
     DirNode dirs[MAX_TREE_ENTRIES];
     int dir_count = 1;
@@ -153,8 +191,8 @@ int tree_from_index(ObjectID *id_out) {
     dirs[0].depth = 0;
     dirs[0].tree.count = 0;
 
-    for (int i = 0; i < index.count; i++) {
-        const char *full_path = index.entries[i].path;
+    for (int i = 0; i < index_count; i++) {
+        const char *full_path = index_entries[i].path;
         const char *part = full_path;
         int current_dir = 0;
 
@@ -162,7 +200,8 @@ int tree_from_index(ObjectID *id_out) {
             const char *slash = strchr(part, '/');
 
             if (!slash) {
-                if (*part == '\0' || strlen(part) >= sizeof(dirs[current_dir].tree.entries[0].name)) {
+                if (*part == '\0' ||
+                    strlen(part) >= sizeof(dirs[current_dir].tree.entries[0].name)) {
                     return -1;
                 }
 
@@ -170,9 +209,10 @@ int tree_from_index(ObjectID *id_out) {
                     return -1;
                 }
 
-                TreeEntry *entry = &dirs[current_dir].tree.entries[dirs[current_dir].tree.count++];
-                entry->mode = index.entries[i].mode;
-                entry->hash = index.entries[i].hash;
+                TreeEntry *entry =
+                    &dirs[current_dir].tree.entries[dirs[current_dir].tree.count++];
+                entry->mode = index_entries[i].mode;
+                entry->hash = index_entries[i].hash;
                 snprintf(entry->name, sizeof(entry->name), "%s", part);
                 break;
             }
@@ -192,7 +232,8 @@ int tree_from_index(ObjectID *id_out) {
                     return -1;
                 }
             } else {
-                if (snprintf(child_path, sizeof(child_path), "%s/%s", dirs[current_dir].path, dirname) >= (int)sizeof(child_path)) {
+                if (snprintf(child_path, sizeof(child_path), "%s/%s",
+                             dirs[current_dir].path, dirname) >= (int)sizeof(child_path)) {
                     return -1;
                 }
             }
@@ -206,7 +247,8 @@ int tree_from_index(ObjectID *id_out) {
             }
 
             if (child_dir == -1) {
-                if (dir_count >= MAX_TREE_ENTRIES || strlen(dirname) >= sizeof(dirs[0].name)) {
+                if (dir_count >= MAX_TREE_ENTRIES ||
+                    strlen(dirname) >= sizeof(dirs[0].name)) {
                     return -1;
                 }
 
@@ -260,7 +302,8 @@ int tree_from_index(ObjectID *id_out) {
                 return -1;
             }
 
-            TreeEntry *entry = &dirs[parent].tree.entries[dirs[parent].tree.count++];
+            TreeEntry *entry =
+                &dirs[parent].tree.entries[dirs[parent].tree.count++];
             entry->mode = MODE_DIR;
             entry->hash = subtree_id;
             snprintf(entry->name, sizeof(entry->name), "%s", dirs[i].name);
