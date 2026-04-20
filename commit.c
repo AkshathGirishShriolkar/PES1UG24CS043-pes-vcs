@@ -218,7 +218,11 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
         return -1;
     }
 
+    if (object_write(OBJ_COMMIT, raw, raw_len, commit_id_out) != 0) {
+        free(raw);
+        return -1;
+    }
+
     free(raw);
-    (void)commit_id_out;
     return -1;
 }
