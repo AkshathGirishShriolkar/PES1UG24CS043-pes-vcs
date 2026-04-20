@@ -247,6 +247,36 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
         return -1;
     }
 
+    void *nul_ptr = memchr(buffer, '\0', file_size);
+    if (!nul_ptr) {
+        free(buffer);
+        return -1;
+    }
+
+    size_t header_len = (unsigned char *)nul_ptr - buffer;
+    size_t actual_data_len = file_size - header_len - 1;
+
+    char type_str[16];
+    size_t declared_len;
+
+    if (sscanf((char *)buffer, "%15s %zu", type_str, &declared_len) != 2) {
+        free(buffer);
+        return -1;
+    }
+
+    if (declared_len != actual_data_len) {
+        free(buffer);
+        return -1;
+    }
+
+    if (strcmp(type_str, "blob") == 0) *type_out = OBJ_BLOB;
+    else if (strcmp(type_str, "tree") == 0) *type_out = OBJ_TREE;
+    else if (strcmp(type_str, "commit") == 0) *type_out = OBJ_COMMIT;
+    else {
+        free(buffer);
+        return -1;
+    }
+
     free(buffer);
     return -1;
 }
