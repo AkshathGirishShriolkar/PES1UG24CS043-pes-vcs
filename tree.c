@@ -153,8 +153,64 @@ int tree_from_index(ObjectID *id_out) {
     dirs[0].depth = 0;
     dirs[0].tree.count = 0;
 
-    (void)dirs;
-    (void)dir_count;
+    for (int i = 0; i < index.count; i++) {
+        const char *full_path = index.entries[i].path;
+        const char *part = full_path;
+        int current_dir = 0;
+
+        while (1) {
+            const char *slash = strchr(part, '/');
+
+            if (!slash) {
+                break;
+            }
+
+            size_t comp_len = (size_t)(slash - part);
+            if (comp_len == 0 || comp_len >= 256) {
+                return -1;
+            }
+
+            char dirname[256];
+            memcpy(dirname, part, comp_len);
+            dirname[comp_len] = '\0';
+
+            char child_path[512];
+            if (dirs[current_dir].path[0] == '\0') {
+                if (snprintf(child_path, sizeof(child_path), "%s", dirname) >= (int)sizeof(child_path)) {
+                    return -1;
+                }
+            } else {
+                if (snprintf(child_path, sizeof(child_path), "%s/%s", dirs[current_dir].path, dirname) >= (int)sizeof(child_path)) {
+                    return -1;
+                }
+            }
+
+            int child_dir = -1;
+            for (int d = 0; d < dir_count; d++) {
+                if (strcmp(dirs[d].path, child_path) == 0) {
+                    child_dir = d;
+                    break;
+                }
+            }
+
+            if (child_dir == -1) {
+                if (dir_count >= MAX_TREE_ENTRIES) {
+                    return -1;
+                }
+
+                child_dir = dir_count++;
+                snprintf(dirs[child_dir].path, sizeof(dirs[child_dir].path), "%s", child_path);
+                snprintf(dirs[child_dir].name, sizeof(dirs[child_dir].name), "%s", dirname);
+                dirs[child_dir].parent = current_dir;
+                dirs[child_dir].depth = dirs[current_dir].depth + 1;
+                dirs[child_dir].tree.count = 0;
+            }
+
+            current_dir = child_dir;
+            part = slash + 1;
+        }
+    }
+
     (void)id_out;
     return -1;
 }
