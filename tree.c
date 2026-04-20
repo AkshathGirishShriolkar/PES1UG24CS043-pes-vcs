@@ -173,7 +173,6 @@ int tree_from_index(ObjectID *id_out) {
                 TreeEntry *entry = &dirs[current_dir].tree.entries[dirs[current_dir].tree.count++];
                 entry->mode = index.entries[i].mode;
                 entry->hash = index.entries[i].hash;
-
                 snprintf(entry->name, sizeof(entry->name), "%s", part);
                 break;
             }
@@ -221,6 +220,50 @@ int tree_from_index(ObjectID *id_out) {
 
             current_dir = child_dir;
             part = slash + 1;
+        }
+    }
+
+    int max_depth = 0;
+    for (int i = 0; i < dir_count; i++) {
+        if (dirs[i].depth > max_depth) {
+            max_depth = dirs[i].depth;
+        }
+    }
+
+    for (int depth = max_depth; depth >= 1; depth--) {
+        for (int i = 0; i < dir_count; i++) {
+            if (dirs[i].depth != depth) {
+                continue;
+            }
+
+            void *tree_data = NULL;
+            size_t tree_len = 0;
+            ObjectID subtree_id;
+
+            if (tree_serialize(&dirs[i].tree, &tree_data, &tree_len) != 0) {
+                return -1;
+            }
+
+            if (object_write(OBJ_TREE, tree_data, tree_len, &subtree_id) != 0) {
+                free(tree_data);
+                return -1;
+            }
+
+            free(tree_data);
+
+            int parent = dirs[i].parent;
+            if (parent < 0) {
+                return -1;
+            }
+
+            if (dirs[parent].tree.count >= MAX_TREE_ENTRIES) {
+                return -1;
+            }
+
+            TreeEntry *entry = &dirs[parent].tree.entries[dirs[parent].tree.count++];
+            entry->mode = MODE_DIR;
+            entry->hash = subtree_id;
+            snprintf(entry->name, sizeof(entry->name), "%s", dirs[i].name);
         }
     }
 
