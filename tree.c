@@ -15,6 +15,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include "index.h"
 
 // ─── Mode Constants ─────────────────────────────────────────────────────────
 
@@ -130,8 +131,30 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 //
 // Returns 0 on success, -1 on error.
 int tree_from_index(ObjectID *id_out) {
-    // TODO: Implement recursive tree building
-    // (See Lab Appendix for logical steps)
+    Index index;
+    if (index_load(&index) != 0) {
+        return -1;
+    }
+
+    typedef struct {
+        char path[512];
+        int parent;
+        char name[256];
+        int depth;
+        Tree tree;
+    } DirNode;
+
+    DirNode dirs[MAX_TREE_ENTRIES];
+    int dir_count = 1;
+
+    dirs[0].path[0] = '\0';
+    dirs[0].parent = -1;
+    dirs[0].name[0] = '\0';
+    dirs[0].depth = 0;
+    dirs[0].tree.count = 0;
+
+    (void)dirs;
+    (void)dir_count;
     (void)id_out;
     return -1;
 }
