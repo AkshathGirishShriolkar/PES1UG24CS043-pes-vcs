@@ -162,6 +162,19 @@ int tree_from_index(ObjectID *id_out) {
             const char *slash = strchr(part, '/');
 
             if (!slash) {
+                if (*part == '\0') {
+                    return -1;
+                }
+
+                if (dirs[current_dir].tree.count >= MAX_TREE_ENTRIES) {
+                    return -1;
+                }
+
+                TreeEntry *entry = &dirs[current_dir].tree.entries[dirs[current_dir].tree.count++];
+                entry->mode = index.entries[i].mode;
+                entry->hash = index.entries[i].hash;
+
+                snprintf(entry->name, sizeof(entry->name), "%s", part);
                 break;
             }
 
