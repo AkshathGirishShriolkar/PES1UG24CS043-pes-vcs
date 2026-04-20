@@ -267,6 +267,14 @@ int tree_from_index(ObjectID *id_out) {
         }
     }
 
-    (void)id_out;
-    return -1;
+    void *root_data = NULL;
+    size_t root_len = 0;
+
+    if (tree_serialize(&dirs[0].tree, &root_data, &root_len) != 0) {
+        return -1;
+    }
+
+    int rc = object_write(OBJ_TREE, root_data, root_len, id_out);
+    free(root_data);
+    return rc;
 }
