@@ -141,8 +141,50 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
         }
     }
 
+    char temp_path[512];
+    snprintf(temp_path, sizeof(temp_path), "%s.tmp.%ld", final_path, (long)getpid());
+
+    int fd = open(temp_path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (fd < 0) {
+        free(full_obj);
+        return -1;
+    }
+
+    size_t written = 0;
+    while (written < full_len) {
+        ssize_t n = write(fd, full_obj + written, full_len - written);
+        if (n <= 0) {
+            close(fd);
+            unlink(temp_path);
+            free(full_obj);
+            return -1;
+        }
+        written += n;
+    }
+
+    if (fsync(fd) != 0) {
+        close(fd);
+        unlink(temp_path);
+        free(full_obj);
+        return -1;
+    }
+
+    close(fd);
+
+    if (rename(temp_path, final_path) != 0) {
+        unlink(temp_path);
+        free(full_obj);
+        return -1;
+    }
+
+    int dir_fd = open(shard_dir, O_RDONLY | O_DIRECTORY);
+    if (dir_fd >= 0) {
+        fsync(dir_fd);
+        close(dir_fd);
+    }
+
     free(full_obj);
-    return -1;
+    return 0;
 }
 
 // Read an object from the store.
