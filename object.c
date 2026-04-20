@@ -115,7 +115,33 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     memcpy(full_obj + header_len + 1, data, len);
 
     compute_hash(full_obj, full_len, id_out);
-    (void)type; (void)data; (void)len; (void)id_out;
+
+    if (object_exists(id_out)) {
+        free(full_obj);
+        return 0;
+    }
+
+    char final_path[512];
+    object_path(id_out, final_path, sizeof(final_path));
+
+    char shard_dir[512];
+    snprintf(shard_dir, sizeof(shard_dir), "%s", final_path);
+
+    char *slash = strrchr(shard_dir, '/');
+    if (!slash) {
+        free(full_obj);
+        return -1;
+    }
+    *slash = '\0';
+
+    if (access(shard_dir, F_OK) != 0) {
+        if (mkdir(shard_dir, 0755) != 0) {
+            free(full_obj);
+            return -1;
+        }
+    }
+
+    free(full_obj);
     return -1;
 }
 
