@@ -191,9 +191,45 @@ int index_load(Index *index) {
 //
 // Returns 0 on success, -1 on error.
 int index_save(const Index *index) {
-    // TODO: Implement atomic index saving
-    // (See Lab Appendix for logical steps)
-    (void)index;
+    IndexEntry sorted[MAX_INDEX_ENTRIES];
+
+    for (int i = 0; i < index->count; i++) {
+        sorted[i] = index->entries[i];
+    }
+
+    for (int i = 0; i < index->count; i++) {
+        for (int j = i + 1; j < index->count; j++) {
+            if (strcmp(sorted[i].path, sorted[j].path) > 0) {
+                IndexEntry tmp = sorted[i];
+                sorted[i] = sorted[j];
+                sorted[j] = tmp;
+            }
+        }
+    }
+
+    char temp_path[512];
+    if (snprintf(temp_path, sizeof(temp_path), "%s.tmp", INDEX_FILE) >= (int)sizeof(temp_path)) {
+        return -1;
+    }
+
+    FILE *fp = fopen(temp_path, "w");
+    if (!fp) {
+        return -1;
+    }
+
+    for (int i = 0; i < index->count; i++) {
+        char hash_hex[HASH_HEX_SIZE + 1];
+        hash_to_hex(&sorted[i].hash, hash_hex);
+
+        fprintf(fp, "%o %s %llu %u %s\n",
+                sorted[i].mode,
+                hash_hex,
+                (unsigned long long)sorted[i].mtime_sec,
+                sorted[i].size,
+                sorted[i].path);
+    }
+
+    fclose(fp);
     return -1;
 }
 
