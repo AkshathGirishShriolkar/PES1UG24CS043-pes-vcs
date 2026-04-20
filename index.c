@@ -275,8 +275,69 @@ int index_save(const Index *index) {
 //
 // Returns 0 on success, -1 on error.
 int index_add(Index *index, const char *path) {
-    // TODO: Implement file staging
-    // (See Lab Appendix for logical steps)
-    (void)index; (void)path;
-    return -1;
+    int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out);
+
+    FILE *fp = fopen(path, "rb");
+    if (!fp) {
+        return -1;
+    }
+
+    if (fseek(fp, 0, SEEK_END) != 0) {
+        fclose(fp);
+        return -1;
+    }
+
+    long size_long = ftell(fp);
+    if (size_long < 0) {
+        fclose(fp);
+        return -1;
+    }
+
+    rewind(fp);
+
+    size_t size = (size_t)size_long;
+    void *data = malloc(size == 0 ? 1 : size);
+    if (!data) {
+        fclose(fp);
+        return -1;
+    }
+
+    if (size > 0 && fread(data, 1, size, fp) != size) {
+        free(data);
+        fclose(fp);
+        return -1;
+    }
+
+    fclose(fp);
+
+    ObjectID id;
+    if (object_write(OBJ_BLOB, data, size, &id) != 0) {
+        free(data);
+        return -1;
+    }
+
+    free(data);
+
+    struct stat st;
+    if (stat(path, &st) != 0) {
+        return -1;
+    }
+
+    IndexEntry *e = index_find(index, path);
+
+    if (!e) {
+        if (index->count >= MAX_INDEX_ENTRIES) {
+            return -1;
+        }
+        e = &index->entries[index->count++];
+    }
+
+    e->mode = (uint32_t)st.st_mode;
+    e->hash = id;
+    e->mtime_sec = (uint64_t)st.st_mtime;
+    e->size = (uint32_t)st.st_size;
+
+    snprintf(e->path, sizeof(e->path), "%s", path);
+
+    return index_save(index);
 }
