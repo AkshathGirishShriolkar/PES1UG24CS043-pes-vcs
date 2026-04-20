@@ -194,8 +194,19 @@ int head_update(const ObjectID *new_commit) {
 //
 // Returns 0 on success, -1 on error.
 int commit_create(const char *message, ObjectID *commit_id_out) {
-    // TODO: Implement commit creation
-    // (See Lab Appendix for logical steps)
-    (void)message; (void)commit_id_out;
+    Commit commit;
+    memset(&commit, 0, sizeof(commit));
+
+    if (tree_from_index(&commit.tree) != 0) {
+        return -1;
+    }
+
+    commit.has_parent = 0;
+    commit.timestamp = (uint64_t)time(NULL);
+
+    snprintf(commit.author, sizeof(commit.author), "%s", pes_author());
+    snprintf(commit.message, sizeof(commit.message), "%s", message);
+
+    (void)commit_id_out;
     return -1;
 }
