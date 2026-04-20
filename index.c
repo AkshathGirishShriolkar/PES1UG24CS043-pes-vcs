@@ -191,7 +191,10 @@ int index_load(Index *index) {
 //
 // Returns 0 on success, -1 on error.
 int index_save(const Index *index) {
-    IndexEntry sorted[MAX_INDEX_ENTRIES];
+    IndexEntry *sorted = malloc((size_t)index->count * sizeof(IndexEntry));
+    if (index->count > 0 && !sorted) {
+        return -1;
+    }
 
     for (int i = 0; i < index->count; i++) {
         sorted[i] = index->entries[i];
@@ -209,11 +212,13 @@ int index_save(const Index *index) {
 
     char temp_path[512];
     if (snprintf(temp_path, sizeof(temp_path), "%s.tmp", INDEX_FILE) >= (int)sizeof(temp_path)) {
+        free(sorted);
         return -1;
     }
 
     FILE *fp = fopen(temp_path, "w");
     if (!fp) {
+        free(sorted);
         return -1;
     }
 
@@ -229,6 +234,7 @@ int index_save(const Index *index) {
                     sorted[i].path) < 0) {
             fclose(fp);
             unlink(temp_path);
+            free(sorted);
             return -1;
         }
     }
@@ -236,6 +242,7 @@ int index_save(const Index *index) {
     if (fflush(fp) != 0) {
         fclose(fp);
         unlink(temp_path);
+        free(sorted);
         return -1;
     }
 
@@ -243,25 +250,30 @@ int index_save(const Index *index) {
     if (fd < 0) {
         fclose(fp);
         unlink(temp_path);
+        free(sorted);
         return -1;
     }
 
     if (fsync(fd) != 0) {
         fclose(fp);
         unlink(temp_path);
+        free(sorted);
         return -1;
     }
 
     if (fclose(fp) != 0) {
         unlink(temp_path);
+        free(sorted);
         return -1;
     }
 
     if (rename(temp_path, INDEX_FILE) != 0) {
         unlink(temp_path);
+        free(sorted);
         return -1;
     }
 
+    free(sorted);
     return 0;
 }
 
@@ -287,22 +299,25 @@ int index_add(Index *index, const char *path) {
         return -1;
     }
 
-    long size_long = ftell(fp);
-    if (size_long < 0) {
+    long file_size_long = ftell(fp);
+    if (file_size_long < 0) {
         fclose(fp);
         return -1;
     }
 
-    rewind(fp);
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        fclose(fp);
+        return -1;
+    }
 
-    size_t size = (size_t)size_long;
-    void *data = malloc(size == 0 ? 1 : size);
+    size_t file_size = (size_t)file_size_long;
+    void *data = malloc(file_size == 0 ? 1 : file_size);
     if (!data) {
         fclose(fp);
         return -1;
     }
 
-    if (size > 0 && fread(data, 1, size, fp) != size) {
+    if (file_size > 0 && fread(data, 1, file_size, fp) != file_size) {
         free(data);
         fclose(fp);
         return -1;
@@ -311,7 +326,7 @@ int index_add(Index *index, const char *path) {
     fclose(fp);
 
     ObjectID id;
-    if (object_write(OBJ_BLOB, data, size, &id) != 0) {
+    if (object_write(OBJ_BLOB, data, file_size, &id) != 0) {
         free(data);
         return -1;
     }
@@ -324,7 +339,6 @@ int index_add(Index *index, const char *path) {
     }
 
     IndexEntry *e = index_find(index, path);
-
     if (!e) {
         if (index->count >= MAX_INDEX_ENTRIES) {
             return -1;
@@ -336,7 +350,6 @@ int index_add(Index *index, const char *path) {
     e->hash = id;
     e->mtime_sec = (uint64_t)st.st_mtime;
     e->size = (uint32_t)st.st_size;
-
     snprintf(e->path, sizeof(e->path), "%s", path);
 
     return index_save(index);
