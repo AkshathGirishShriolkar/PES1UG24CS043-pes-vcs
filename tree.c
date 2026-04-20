@@ -162,7 +162,7 @@ int tree_from_index(ObjectID *id_out) {
             const char *slash = strchr(part, '/');
 
             if (!slash) {
-                if (*part == '\0') {
+                if (*part == '\0' || strlen(part) >= sizeof(dirs[current_dir].tree.entries[0].name)) {
                     return -1;
                 }
 
@@ -206,7 +206,7 @@ int tree_from_index(ObjectID *id_out) {
             }
 
             if (child_dir == -1) {
-                if (dir_count >= MAX_TREE_ENTRIES) {
+                if (dir_count >= MAX_TREE_ENTRIES || strlen(dirname) >= sizeof(dirs[0].name)) {
                     return -1;
                 }
 
